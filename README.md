@@ -1,5 +1,5 @@
 <div  align=center>
-    <img src="https://github.com/FerdinandSukhoi/RCloneDriver/raw/master/images/Full_2048.png" width = 30% height = 30%  />
+    <img src="https://github.com/FerdinandSukhoi/RCloneDriver/blob/main/images/Full_2048.png?raw=true" width = 30% height = 30%  />
 </div>
 
 # RCloneDriver

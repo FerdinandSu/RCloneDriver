@@ -70,6 +70,12 @@ where `local-dir-name` is optional, by default it will be `remote.Split("/")[^1]
 
 **Of course, you can also use `rclone copy` or other `cp` commands manually.**
 
+## Tools
+
+A win32 `.reg` file is included in the `/tools` directory, which can install `rcd` command to your windows content menu.
+
+**Notice: This `.reg` uses `pwsh`(Powershell Core) as shell, which can be changed as `powershell` (Windows Powershell) alternatively if you don't have it installed. ** However, Powershell Core is much more newer and better than Windows Powershell, you can get it from Windows Store.
+
 ## How it works
 
 ### Initializing

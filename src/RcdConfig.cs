@@ -7,6 +7,13 @@ public enum FilterOptionType
     DirectoriesIfFilenamePresented = 2 // Exclude directories if filename is present
 }
 
+public enum UpdateStrategy
+{
+    Checksum = 1, // Use --checksum
+    ModTime = 0, // Use --update option
+    SizeOnly = -1 // Use --size-only option
+}
+
 [Serializable]
 public record FilterOption(FilterOptionType Type, string Pattern)
 {
@@ -30,5 +37,7 @@ public record FilterOption(FilterOptionType Type, string Pattern)
 public record RcdConfig(
     string Remote,
     DateTime Timestamp,
+    UpdateStrategy UpdateStrategy,
+    bool TrackRenames,
     List<FilterOption> Excludes
 );

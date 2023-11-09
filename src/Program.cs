@@ -7,6 +7,9 @@ return args switch
 {
     ["init", _] => await Init(args[1]),
     ["clone", ..] => await Clone(args[1..]),
+    ["push"] => await Push(),
+    ["pull"] => await Pull(),
+    [_] => await Sync(args[0]),
     [] => await Sync(),
     _ => -1
 };
@@ -87,8 +90,52 @@ async Task<int> Clone(string[] xargs)
     return 0;
 }
 
-async Task<int> Sync()
+async Task<int> RunSync(RcdConfig conf, string src, string des)
 {
+    Log(LogLevel.Information, "Calling RClone; {0} => {1}.", src, des);
+    var @params = new[]
+        {
+            "sync",
+            src,
+            des,
+            conf.UpdateStrategy switch
+            {
+                UpdateStrategy.Checksum => "--checksum",
+                UpdateStrategy.ModTime => "--update",
+                UpdateStrategy.SizeOnly => "--size-only",
+                _ => throw new ArgumentOutOfRangeException()
+            },
+            "-P",
+            "--create-empty-src-dirs",
+            conf.TrackRenames ? "--track-renames" : ""
+        }.Concat(conf.Excludes.SelectMany(ex => ex.ToStringArray()))
+        .Concat(new[]
+        {
+            "--filter",
+            "\"+ .rcd/\""
+        })
+        .ToArray();
+    await RClone(@params.Append("--dry-run").ToArray());
+    await Console.Out.WriteLineAsync(
+        "Dry run completed, type C/i/q to [Continue(default)],[Use Interactive], or [Quit(other characters)].");
+    var cmd = Console.ReadLine();
+    switch (cmd)
+    {
+        case "c" or "":
+            await RClone(@params);
+            break;
+        case "i":
+            await RClone(@params.Append("--interactive").ToArray());
+            ;
+            break;
+    }
+
+    return 0;
+}
+
+async Task<int> Sync(string dir = ".")
+{
+    Directory.SetCurrentDirectory(dir);
     if (!Directory.Exists(".rcd") || Directory.Exists(".rcd-remote"))
     {
         Log(LogLevel.Critical, "Repo not found or broken.");
@@ -149,39 +196,68 @@ async Task<int> Sync()
 
     Log(LogLevel.Information, "Config updated.");
     var (src, des) = cmp >= 0 ? (".", latest.Remote) : (latest.Remote, ".");
-    Log(LogLevel.Information, "Calling RClone; {0} => {1}.", src, des);
-    var @params = new[]
-        {
-            "sync",
-            src,
-            des,
-            "-c",
-            "-P",
-            "--create-empty-src-dirs",
-            "--track-renames"
-        }.Concat(latest.Excludes.SelectMany(ex => ex.ToStringArray()))
-        .Concat(new[]
-        {
-            "--filter",
-            "\"+ .rcd/\""
-        })
-        .ToArray();
-    await RClone(@params.Append("--dry-run").ToArray());
-    await Console.Out.WriteLineAsync(
-        "Dry run completed, type C/i/q to [Continue(default)],[Use Interactive], or [Quit(other characters)].");
-    var cmd = Console.ReadLine();
-    switch (cmd)
+    return await RunSync(latest, src, des);
+}
+
+async Task<int> Pull()
+{
+    if (!Directory.Exists(".rcd") || Directory.Exists(".rcd-remote"))
     {
-        case "c" or "":
-            await RClone(@params);
-            break;
-        case "i":
-            await RClone(@params.Append("--interactive").ToArray());
-            ;
-            break;
+        Log(LogLevel.Critical, "Repo not found or broken.");
+        return 1;
     }
 
-    return 0;
+    var localConfig = await ReadConfig(".rcd/conf.json");
+    if (localConfig == null)
+    {
+        Log(LogLevel.Critical, "Failed to Read Local Config.");
+        return 1;
+    }
+
+    try
+    {
+        Directory.Move(".rcd", ".rcd-old");
+    }
+    catch (Exception)
+    {
+        Log(LogLevel.Critical, "Failed to Update Local Config.");
+        return 1;
+    }
+
+    await RClone(new[]
+    {
+        "copy",
+        $"{localConfig.Remote}/.rcd",
+        ".rcd"
+    });
+    var remoteConfig = await ReadConfig(".rcd/conf.json");
+    if (remoteConfig == null)
+    {
+        Log(LogLevel.Critical, "Failed to Read Remote Config.");
+        return 1;
+    }
+
+    Log(LogLevel.Information, "Got Remote Config.");
+
+    return await RunSync(remoteConfig, remoteConfig.Remote, ".");
+}
+
+async Task<int> Push()
+{
+    if (!Directory.Exists(".rcd"))
+    {
+        Log(LogLevel.Critical, "Repo not found or broken.");
+        return 1;
+    }
+
+    var localConfig = await ReadConfig(".rcd/conf.json");
+    if (localConfig == null)
+    {
+        Log(LogLevel.Critical, "Failed to Read Local Config.");
+        return 1;
+    }
+
+    return await RunSync(localConfig, ".", localConfig.Remote);
 }
 
 async Task<int> Init(string remote)
@@ -193,9 +269,9 @@ async Task<int> Init(string remote)
     }
 
     Directory.CreateDirectory(".rcd");
-    var conf = new RcdConfig(remote, DateTime.Now, new List<FilterOption>
+    var conf = new RcdConfig(remote, DateTime.Now, UpdateStrategy.ModTime, false, new List<FilterOption>
     {
-        new FilterOption(FilterOptionType.FilesMatchingPattern, "- node_modules/")
+        new(FilterOptionType.DirectoriesIfFilenamePresented, ".gitignore")
     });
     await WriteConfig(".rcd/conf.json", conf);
     await RClone(new[]

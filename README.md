@@ -30,6 +30,8 @@ Like this:
 {
     "Remote": "netdisk:/rcdtest",
     "Timestamp": "2023-11-05T21:20:47.4325265+08:00",
+    "UpdateStrategy": 0,
+    "TrackRenames": false,
     "Excludes": [
         {
             "Type": 0,
@@ -47,7 +49,26 @@ Like this:
 }
 ```
 
-You only need to customize the `Excludes` Property, which is defined as `FilterOption[]` where:
+You might need to customize it.
+
+#### `TrackRenames` Property
+
+Use `--track-renames` option or not. **Notice the option only works when checksum is available.**
+
+#### `UpdateStrategy` Property
+
+```csharp
+public enum UpdateStrategy
+{
+    Checksum = 1, // Use --checksum
+    ModTime = 0, // Use --update option
+    SizeOnly = -1 // Use --size-only option
+}
+```
+
+#### `Excludes` Property
+
+It is defined as `FilterOption[]` where:
 
 ```csharp
 public record FilterOption(FilterOptionType Type, string Pattern);
@@ -72,9 +93,13 @@ where `local-dir-name` is optional, by default it will be `remote.Split("/")[^1]
 
 ## Tools
 
-A win32 `.reg` file is included in the `/tools` directory, which can install `rcd` command to your windows content menu.
+Win32 `.reg` files is included in the `/tools` directory, which can install `rcd` command to your windows content menu.
 
 **Notice: This `.reg` uses `pwsh`(Powershell Core) as shell, which can be changed as `powershell` (Windows Powershell) alternatively if you don't have it installed. ** However, Powershell Core is much more newer and better than Windows Powershell, you can get it from Windows Store.
+
+### Push and Pull repository
+
+You can specify the synchronization direction manually. `rcd push` and `rcd pull` follow the same direction habit as `git push` and `git pull`.
 
 ## How it works
 
@@ -85,16 +110,35 @@ A win32 `.reg` file is included in the `/tools` directory, which can install `rc
 
 ### Syncronizing
 
-1. Pull remote config & status into `./.rcd-remote`: `rclone copy remote:.rcd ./.rcd-remote`
-2. Compare timestamp between local and remote ones
-3. Choose the latest one as `src` and another as `des`
-4. Merge & update configs:
+1. Change current directory if the argument passed
+2. Pull remote config & status into `./.rcd-remote`: `rclone copy <remote>/.rcd ./.rcd-remote`
+3. Compare timestamp between local and remote ones
+4. Choose the latest one as `src` and another as `des`
+5. Merge & update configs:
    1. Merge config, update timestamp
    2. Remove `./.rcd-remote` or `./.rcd-old` (if remote config newer)
-5. Run `rclone sync [src] [des] -i -c -P --create-empty-src-dirs --track-renames <filter-options> --filter "+ .rcd" --dry-run`
-6. Based on the decision os the user, Continue/Interactive/Quit
-   1. Continue: `rclone sync [src] [des] -i -c -P --create-empty-src-dirs --track-renames <filter-options> --filter "+ .rcd"`
-   2. Interactive: `rclone sync [src] [des] -i -c -P --create-empty-src-dirs --track-renames <filter-options> --filter "+ .rcd" -i`
+6. Run `rclone sync [src] [des] <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd" --dry-run`
+7. Based on the decision os the user, Continue/Interactive/Quit
+   1. Continue: `rclone sync [src] [des] <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd"`
+   2. Interactive: `rclone sync [src] [des] <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd" -i`
+   3. Quit: Just `return 0`
+
+### Pulling
+
+1. Backup local config to `./.rcd-old`
+2. Pull remote config & status into `./.rcd`: `rclone copy <remote>/.rcd ./.rcd`
+3. Run `rclone sync <remote> . -i <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd" --dry-run`
+4. Based on the decision os the user, Continue/Interactive/Quit
+   1. Continue: `rclone sync <remote> . <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd"`
+   2. Interactive: `rclone sync <remote> . <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd" -i`
+   3. Quit: Just `return 0`
+
+### Pushing
+
+1. Run `rclone sync <remote> . -i <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd" --dry-run`
+2. Based on the decision os the user, Continue/Interactive/Quit
+   1. Continue: `rclone sync . <remote> <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd"`
+   2. Interactive: `rclone sync . <remote> <update-strategy> -P --create-empty-src-dirs <track-renames> <filter-options> --filter "+ .rcd" -i`
    3. Quit: Just `return 0`
 
 ### Cloning
